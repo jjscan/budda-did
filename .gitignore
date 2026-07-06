@@ -1,0 +1,9 @@
+# OS
+.DS_Store
+
+# 참조용 목업/사진 (공개 저장소에 올리지 않음)
+*.jpeg
+*.jpg
+*.png
+!icon-192.png
+!icon-512.png
