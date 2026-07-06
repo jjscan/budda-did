@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>내 안에 모시는 부처</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #000;
+    color: #eee;
+    font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ── 2단 레이아웃: 좌측 그래프 영역 + 우측 시세 정보 ── */
+  #stage {
+    width: min(96vw, 1360px);
+    display: grid;
+    grid-template-columns: 1fr clamp(220px, 27%, 360px);
+    gap: clamp(20px, 4vw, 64px);
+    align-items: start;
+  }
+  #left {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 2vh, 24px);
+    min-width: 0;
+  }
+  #title {
+    font-size: clamp(26px, 4.6vw, 58px);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #f2ede6;
+  }
+  #priceRow {
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 1.6vw, 22px);
+  }
+  #unitLabel {
+    font-size: clamp(18px, 2.6vw, 36px);
+    font-weight: 700;
+    color: #e8e2d8;
+    white-space: nowrap;
+  }
+  #priceBox {
+    flex: 1;
+    min-width: 0;
+    border: 1.5px solid #a83228;
+    border-radius: 3px;
+    background: #050505;
+    padding: clamp(8px, 1vw, 14px) clamp(10px, 1.2vw, 18px);
+    box-shadow: inset 0 0 14px rgba(0,0,0,0.9);
+  }
+  #led { display: block; width: 100%; }
+
+  #chartBox {
+    width: 100%;
+    border: 1px solid #2c2c2c;
+    border-radius: 2px;
+    background: #030303;
+    padding: clamp(8px, 1vw, 14px);
+  }
+  #chart { display: block; width: 100%; height: clamp(160px, 38vh, 340px); }
+
+  #footMsg {
+    align-self: center;
+    font-size: clamp(13px, 1.8vw, 24px);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: #cfc9c0;
+  }
+
+  /* ── 우측 시세 정보 열 ── */
+  #side {
+    display: flex;
+    flex-direction: column;
+    padding-top: clamp(2px, 1.2vh, 16px);
+  }
+  .stat { padding: clamp(12px, 2.6vh, 26px) 0; }
+  .stat + .stat { border-top: 1px solid #262626; }
+  .statLabel {
+    color: #9a9a9a;
+    font-size: clamp(13px, 1.4vw, 20px);
+    margin-bottom: clamp(4px, 0.8vh, 10px);
+  }
+  .statValue {
+    color: #f0ece4;
+    font-size: clamp(20px, 2.2vw, 34px);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  #stCur {
+    color: #ff2418;
+    font-size: clamp(26px, 3vw, 44px);
+    text-shadow: 0 0 14px rgba(255, 36, 24, 0.45);
+  }
+  #stChange {
+    margin-top: clamp(3px, 0.6vh, 8px);
+    font-size: clamp(13px, 1.5vw, 21px);
+    font-weight: 600;
+  }
+  #stChange.up { color: #ff4a3a; }
+  #stChange.down { color: #4a7dff; }
+  #stChange.flat { color: #888; }
+
+  /* 세로 화면(태블릿 직치)에서는 한 열로 쌓기 */
+  @media (orientation: portrait) {
+    body { overflow-y: auto; }
+    #stage { grid-template-columns: 1fr; }
+    #side { padding-top: 0; }
+  }
+
+  /* ── 무인 가산 카운트다운 (택시 미터기) — 우상단 ⚙ 왼쪽, 운영자만 알아보게 은근하게 ── */
+  #countdown {
+    position: fixed; top: 22px; right: 68px;
+    display: flex; align-items: baseline; gap: 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    z-index: 10;
+  }
+  #countdown[hidden] { visibility: hidden; } /* display:flex가 hidden 속성을 무력화하므로 명시 */
+  #countdown .cdLabel { font-size: 12px; color: #4a4a4a; letter-spacing: 0.04em; }
+  #cdTime { font-size: 13px; font-weight: 600; color: #6e4640; }
+
+  /* ── 시뮬레이션/설정 패널 (P3에서 관리자 콘솔로 발전) ── */
+  #gear {
+    position: fixed; top: 8px; right: 8px;
+    width: 52px; height: 52px;
+    background: transparent; color: #777;
+    border: none; font-size: 26px; cursor: pointer;
+    z-index: 10;
+  }
+  #gear:active { color: #fff; }
+  #panel {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    max-height: 62vh; overflow-y: auto;
+    background: #16161a;
+    border-top: 1px solid #333;
+    padding: 14px 16px 22px;
+    z-index: 9;
+    font-size: 14px;
+  }
+  #panel h2 { font-size: 15px; color: #9a94ff; margin-bottom: 10px; }
+  #panel .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+  }
+  #panel label { flex: 0 0 148px; color: #aaa; }
+  #panel input[type="range"] { flex: 1; accent-color: #e33; }
+  #panel input[type="number"] {
+    width: 130px; background: #222; color: #eee;
+    border: 1px solid #444; border-radius: 4px; padding: 5px 8px;
+    font-size: 14px;
+  }
+  #panel input[type="text"] {
+    flex: 1; background: #222; color: #eee;
+    border: 1px solid #444; border-radius: 4px; padding: 5px 8px;
+    font-size: 14px;
+  }
+  #panel select {
+    width: 130px; background: #222; color: #eee;
+    border: 1px solid #444; border-radius: 4px; padding: 5px 8px;
+    font-size: 14px;
+  }
+  #panel input[type="checkbox"] { transform: scale(1.2); accent-color: #e33; }
+  #panel .val { min-width: 44px; text-align: right; color: #fff; font-weight: 700; }
+  #panel .readout {
+    margin-top: 10px; padding: 10px; border-radius: 6px;
+    background: #0d0d10; color: #8f8;
+    font-family: ui-monospace, monospace; font-size: 12.5px;
+    line-height: 1.7; white-space: pre;
+  }
+  #panel .hint { color: #666; font-size: 12px; margin-top: 8px; }
+  #panel button {
+    margin-top: 10px; background: #2a2a30; color: #ccc;
+    border: 1px solid #444; border-radius: 6px; padding: 7px 14px;
+    cursor: pointer; font-size: 13px; margin-right: 8px;
+  }
+  #panel .row button { margin-top: 0; }
+
+  /* 캘리브레이션 뷰: 카메라 프리뷰 + 감지 박스 (거치 각도 조정용) */
+  #calib {
+    position: relative; margin: 10px 0; max-width: 480px;
+    border: 1px solid #333; border-radius: 6px; overflow: hidden;
+    background: #000;
+  }
+  #camVideo { display: block; width: 100%; }
+  #camOverlay { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #calibInfo {
+    position: absolute; left: 8px; top: 6px;
+    color: #00e050; font: 600 13px ui-monospace, monospace;
+    text-shadow: 0 0 4px #000;
+  }
+</style>
+</head>
+<body>
+
+<main id="stage">
+  <div id="left">
+    <h1 id="title">내 안에 모시는 부처</h1>
+    <div id="priceRow">
+      <span id="unitLabel">한 입에</span>
+      <div id="priceBox"><canvas id="led"></canvas></div>
+    </div>
+    <div id="chartBox"><canvas id="chart"></canvas></div>
+    <p id="footMsg">사람의 수에 따라 가격이 실시간으로 변동됩니다</p>
+  </div>
+
+  <aside id="side">
+    <div class="stat">
+      <div class="statLabel">현재 가격</div>
+      <div class="statValue" id="stCur">₩ 0</div>
+      <div id="stChange" class="flat">— 0 (0.00%)</div>
+    </div>
+    <div class="stat">
+      <div class="statLabel">현재 참여 인원</div>
+      <div class="statValue"><span id="stCount">0</span> 명</div>
+    </div>
+    <div class="stat">
+      <div class="statLabel">오늘 최고가</div>
+      <div class="statValue" id="stHi">₩ 0</div>
+    </div>
+    <div class="stat">
+      <div class="statLabel">오늘 최저가</div>
+      <div class="statValue" id="stLo">₩ 0</div>
+    </div>
+  </aside>
+</main>
+
+<div id="countdown" hidden>
+  <span class="cdLabel" id="cdLabel">무인 가산 +₩10,000</span>
+  <span id="cdTime">(00:30)</span>
+</div>
+<button id="gear" aria-label="설정">⚙</button>
+
+<section id="panel" hidden>
+  <h2>시뮬레이션 / 가격 엔진 설정 <span style="color:#555">(P2에서 카메라 감지로 대체)</span></h2>
+  <div class="row">
+    <label>카운트 소스</label>
+    <select id="pSource">
+      <option value="sim">슬라이더 (시뮬레이션)</option>
+      <option value="camera">카메라 (인원 감지)</option>
+    </select>
+    <button id="btnCam">카메라 시작</button>
+    <span id="camStatus" style="color:#888;font-size:12px"></span>
+  </div>
+  <div class="row">
+    <label>카메라 방향</label>
+    <select id="pFacing">
+      <option value="user">전면 (화면 쪽)</option>
+      <option value="environment">후면</option>
+    </select>
+  </div>
+  <div class="row"><label>감지 주기 (초)</label><input type="number" id="pDetSec" step="0.5" min="0.5"></div>
+  <div class="row"><label>감지 신뢰도 (0~1)</label><input type="number" id="pMinScore" step="0.05" min="0.1" max="0.95"></div>
+  <div id="calib" hidden>
+    <video id="camVideo" playsinline muted></video>
+    <canvas id="camOverlay"></canvas>
+    <div id="calibInfo">감지 인원: 0명</div>
+  </div>
+  <div class="row">
+    <label for="simCount">시뮬레이션 인원</label>
+    <input type="range" id="simCount" min="0" max="30" step="1" value="0">
+    <span class="val" id="simCountVal">0</span>
+  </div>
+  <div class="row"><label>타이틀 문구</label><input type="text" id="tTitle"></div>
+  <div class="row"><label>단위 문구</label><input type="text" id="tUnit"></div>
+  <div class="row"><label>하단 멘트</label><input type="text" id="tFoot"></div>
+  <div class="row"><label>기준가 (₩)</label><input type="number" id="pBase" step="10000"></div>
+  <div class="row"><label>인당 단가 (₩)</label><input type="number" id="pUnit" step="10000"></div>
+  <div class="row"><label>하한 (₩)</label><input type="number" id="pMin" step="10000"></div>
+  <div class="row"><label>상한 (₩)</label><input type="number" id="pMax" step="10000"></div>
+  <div class="row"><label>갱신 주기 (초)</label><input type="number" id="pInterval" step="0.5" min="0.5"></div>
+  <div class="row"><label>차트 종류</label>
+    <select id="pChartType">
+      <option value="candle">1. 캔들</option>
+      <option value="line">2. 꺾은선</option>
+    </select>
+  </div>
+  <div class="row"><label>봉 주기 (분)</label><input type="number" id="pCandleMin" step="1" min="0.05"> <span style="color:#666">캔들 1개의 기간 · 변경 시 차트 리셋</span></div>
+  <div class="row"><label>차트 X축 범위 (분)</label><input type="number" id="pChartMin" step="1" min="1"> <span style="color:#666">1440 = 1일</span></div>
+  <div class="row"><label>무인 가산 주기 (초)</label><input type="number" id="pTaxiSec" step="1" min="3"></div>
+  <div class="row"><label>무인 가산 금액 (₩)</label><input type="number" id="pTaxiAmt" step="1000"></div>
+  <div class="row">
+    <label for="pCdShow">카운트다운 표시</label>
+    <input type="checkbox" id="pCdShow">
+  </div>
+  <div class="row">
+    <label for="pLock">가격 고정 모드</label>
+    <input type="checkbox" id="pLock">
+    <input type="number" id="pLockVal" step="10000">
+    <span style="color:#666">시연·촬영용 — 인원·미터기 무시</span>
+  </div>
+  <div class="row">
+    <label for="tPin">관리자 PIN</label>
+    <input type="text" id="tPin" style="flex:0 0 130px" inputmode="numeric" autocomplete="off">
+    <span style="color:#666">비우면 잠금 없음 · 설정 시 패널 열 때 PIN 요구</span>
+  </div>
+  <div class="readout" id="readout"></div>
+  <button id="btnTaxiReset">미터기 가산액 초기화</button>
+  <button id="btnDayReset">오늘 시가·최고·최저 초기화</button>
+  <button id="btnReset">기본값으로 초기화</button>
+  <p class="hint">우상단 ⚙ 버튼 또는 화면 아무 곳이나 빠르게 두 번 탭하면 패널이 열리고 닫힙니다. 설정은 자동 저장됩니다.</p>
+</section>
+
+<script>
+"use strict";
+
+/* ══════════════════ 1. 도트 매트릭스 LED 렌더러 ══════════════════ */
+
+const FONT = { // 5×7 비트맵 (₩ 는 7×7)
+  "0": ["01110","10001","10011","10101","11001","10001","01110"],
+  "1": ["00100","01100","00100","00100","00100","00100","01110"],
+  "2": ["01110","10001","00001","00010","00100","01000","11111"],
+  "3": ["11111","00010","00100","00010","00001","10001","01110"],
+  "4": ["00010","00110","01010","10010","11111","00010","00010"],
+  "5": ["11111","10000","11110","00001","00001","10001","01110"],
+  "6": ["00110","01000","10000","11110","10001","10001","01110"],
+  "7": ["11111","00001","00010","00100","01000","01000","01000"],
+  "8": ["01110","10001","10001","01110","10001","10001","01110"],
+  "9": ["01110","10001","10001","01111","00001","00010","01100"],
+  ",": ["000","000","000","000","000","011","010"],
+  " ": ["000","000","000","000","000","000","000"],
+  // ₩ = W(4획: 바깥 다리 2 + 안쪽 V) + 가로줄 2개, 9×7
+  "₩": [
+    "100010001",
+    "100010001",
+    "111111111",
+    "010101010",
+    "111111111",
+    "001000100",
+    "001000100",
+  ],
+};
+const ROWS = 7;
+
+const canvas = document.getElementById("led");
+const ctx = canvas.getContext("2d");
+
+function drawLED(text, glow) {
+  const glyphs = [...text].map(ch => FONT[ch] || FONT[" "]);
+  const cols = glyphs.reduce((w, g) => w + g[0].length + 1, -1);
+
+  const boxW = canvas.clientWidth;
+  if (!boxW) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cell = boxW / cols;
+  const boxH = cell * ROWS;
+  canvas.width = Math.round(boxW * dpr);
+  canvas.height = Math.round(boxH * dpr);
+  canvas.style.height = boxH + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.clearRect(0, 0, boxW, boxH);
+  const r = cell * 0.36;
+
+  // 꺼진 도트 (LED 판 질감)
+  ctx.fillStyle = "#1c0505";
+  let x0 = 0;
+  for (const g of glyphs) {
+    const gw = g[0].length;
+    for (let row = 0; row < ROWS; row++)
+      for (let col = 0; col < gw; col++) {
+        ctx.beginPath();
+        ctx.arc((x0 + col + 0.5) * cell, (row + 0.5) * cell, r, 0, 7);
+        ctx.fill();
+      }
+    x0 += gw + 1;
+  }
+
+  // 켜진 도트
+  ctx.fillStyle = "#ff2418";
+  ctx.shadowColor = "#ff3020";
+  ctx.shadowBlur = glow ? cell * 1.1 : cell * 0.45;
+  x0 = 0;
+  for (const g of glyphs) {
+    const gw = g[0].length;
+    for (let row = 0; row < ROWS; row++)
+      for (let col = 0; col < gw; col++)
+        if (g[row][col] === "1") {
+          ctx.beginPath();
+          ctx.arc((x0 + col + 0.5) * cell, (row + 0.5) * cell, r, 0, 7);
+          ctx.fill();
+        }
+    x0 += gw + 1;
+  }
+  ctx.shadowBlur = 0;
+}
+
+/* ══════════════════ 2. 가격 엔진 ══════════════════ */
+
+const DEFAULTS = {
+  base: 2500000,      // 기준가
+  unit: 70000,        // 인당 단가
+  min: 1000000,       // 하한
+  max: 9900000,       // 상한
+  interval: 2,        // 갱신 주기(초)
+  taxiSec: 30,        // 무인 가산 주기(초) — 택시 미터기 카운트다운
+  taxiAmt: 10000,     // 카운트다운 0 도달 시 가산 금액
+  cdShow: true,       // 카운트다운을 화면에 표시할지
+  source: "sim",      // 카운트 소스: sim(슬라이더) | camera(비전 감지)
+  lockPrice: false,   // 가격 고정 모드 (시연·촬영용)
+  lockValue: 2780000, // 고정 가격
+  adminPin: "",       // 관리자 PIN — 비우면 잠금 없음
+  camFacing: "user",  // 카메라 방향: user(전면) | environment(후면)
+  detSec: 1,          // 감지 주기(초)
+  minScore: 0.5,      // 사람 판정 신뢰도 임계값 (0~1)
+  chartMin: 1440,     // 차트 X축 범위(분) — 기본 1일
+  candleMin: 5,       // 봉 주기(분) — 캔들 1개의 기간, 기본 5분봉
+  chartType: "candle",// 차트 종류: candle | line
+  titleText: "내 안에 모시는 부처",
+  unitText: "한 입에",
+  footText: "사람의 수에 따라 가격이 실시간으로 변동됩니다",
+};
+const STORE_KEY = "budda.params.v2";
+const ACCUM_KEY = "budda.taxiAccum.v1";
+const DAY_KEY = "budda.day.v1";
+
+let params = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORE_KEY) || "{}") };
+const saveParams = () => localStorage.setItem(STORE_KEY, JSON.stringify(params));
+
+const state = {
+  simCount: 0,        // 슬라이더 값 (시뮬레이션 소스)
+  camCount: 0,        // 카메라 감지 인원 (P2)
+  emaCount: 0,        // 지수이동평균 (가격 널뛰기 방지)
+  taxiAccum: parseInt(localStorage.getItem(ACCUM_KEY) || "0", 10), // 미터기 누적 가산액
+  taxiLeft: 0,        // 카운트다운 잔여 초
+  target: 0,
+  display: 0,
+  flashUntil: 0,
+};
+state.taxiLeft = params.taxiSec;
+
+// 오늘의 시가·최고·최저 (날짜가 바뀌면 리셋, 재부팅에는 유지)
+const todayStr = () => {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+};
+let day = JSON.parse(localStorage.getItem(DAY_KEY) || "null");
+const saveDay = () => localStorage.setItem(DAY_KEY, JSON.stringify(day));
+function initDay() {
+  if (!day || day.date !== todayStr()) {
+    day = { date: todayStr(), open: state.target, hi: state.target, lo: state.target };
+    saveDay();
+  }
+}
+function noteDayPrice(p) {
+  let changed = false;
+  if (p > day.hi) { day.hi = p; changed = true; }
+  if (p < day.lo) { day.lo = p; changed = true; }
+  if (changed) saveDay();
+}
+
+const EMA_ALPHA = 0.4;
+const round10k = v => Math.round(v / 10000) * 10000;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// 카운트 소스 교체 지점: 설정에 따라 슬라이더 또는 카메라 감지 인원
+function readCount() {
+  return params.source === "camera" ? state.camCount : state.simCount;
+}
+
+function computeTarget() {
+  const raw = params.lockPrice
+    ? params.lockValue // 고정 모드: 인원·미터기 무시
+    : round10k(params.base + state.emaCount * params.unit) + state.taxiAccum;
+  const next = clamp(raw, params.min, params.max);
+  if (next !== state.target) {
+    state.target = next;
+    state.flashUntil = performance.now() + 700;
+  }
+}
+
+function engineTick() {
+  state.emaCount = EMA_ALPHA * readCount() + (1 - EMA_ALPHA) * state.emaCount;
+  computeTarget();
+}
+
+let engineTimer = null;
+function restartEngine() {
+  clearInterval(engineTimer);
+  engineTick();
+  engineTimer = setInterval(engineTick, params.interval * 1000);
+}
+
+/* ── 택시 미터기: 무인 상태 1초 단위 카운트다운 ── */
+function taxiTick() {
+  if (params.lockPrice) {          // 고정 모드에서는 미터기 정지
+    state.taxiLeft = params.taxiSec;
+    updateCountdown();
+    pushHistory();
+    return;
+  }
+  if (readCount() === 0) {
+    state.taxiLeft--;
+    if (state.taxiLeft <= 0) {
+      // 상한에 이미 도달했다면 더 누적하지 않는다 (미터기 정지)
+      if (state.target < params.max) {
+        state.taxiAccum += params.taxiAmt;
+        localStorage.setItem(ACCUM_KEY, String(state.taxiAccum));
+      }
+      state.taxiLeft = params.taxiSec;
+      computeTarget();
+    }
+  } else {
+    state.taxiLeft = params.taxiSec;
+  }
+  updateCountdown();
+  pushHistory();
+}
+setInterval(taxiTick, 1000);
+
+const cdBox = document.getElementById("countdown");
+const cdTime = document.getElementById("cdTime");
+const cdLabel = document.getElementById("cdLabel");
+function updateCountdown() {
+  const active = params.cdShow && !params.lockPrice && readCount() === 0 && state.target < params.max;
+  cdBox.hidden = !active;
+  if (!active) return;
+  const m = Math.floor(state.taxiLeft / 60), s = state.taxiLeft % 60;
+  cdTime.textContent = "(" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + ")";
+  cdLabel.textContent = "무인 가산 +₩" + params.taxiAmt.toLocaleString("ko-KR");
+}
+
+/* ── 표시가를 목표가로 틱 단위 수렴 (시세판 애니메이션) ── */
+function animTick() {
+  const diff = state.target - state.display;
+  if (diff !== 0) {
+    const step = Math.max(10000, round10k(Math.abs(diff) * 0.28));
+    state.display += Math.sign(diff) * Math.min(step, Math.abs(diff));
+    noteDayPrice(state.display);
+  }
+  render();
+}
+setInterval(animTick, 90);
+
+const fmt = v => "₩ " + v.toLocaleString("ko-KR");
+let lastFrame = "";
+function render() {
+  const glow = performance.now() < state.flashUntil;
+  const frame = fmt(state.display) + (glow ? "*" : "");
+  if (frame === lastFrame) return;
+  lastFrame = frame;
+  drawLED(fmt(state.display), glow);
+  updateSide();
+  updateReadout();
+}
+window.addEventListener("resize", () => { lastFrame = ""; render(); drawChart(); });
+
+/* ── 우측 시세 정보 열 ── */
+const stCur = document.getElementById("stCur");
+const stChange = document.getElementById("stChange");
+const stCount = document.getElementById("stCount");
+const stHi = document.getElementById("stHi");
+const stLo = document.getElementById("stLo");
+function updateSide() {
+  stCur.textContent = fmt(state.display);
+  stCount.textContent = readCount();
+  stHi.textContent = fmt(day.hi);
+  stLo.textContent = fmt(day.lo);
+
+  const diff = state.display - day.open;
+  const pct = day.open ? (diff / day.open) * 100 : 0;
+  if (diff > 0) {
+    stChange.className = "up";
+    stChange.textContent = "▲ +" + diff.toLocaleString("ko-KR") + " (" + pct.toFixed(2) + "%)";
+  } else if (diff < 0) {
+    stChange.className = "down";
+    stChange.textContent = "▼ -" + Math.abs(diff).toLocaleString("ko-KR") + " (" + pct.toFixed(2) + "%)";
+  } else {
+    stChange.className = "flat";
+    stChange.textContent = "— 0 (0.00%)";
+  }
+}
+
+/* ══════════════════ 3. 실시간 가격 캔들차트 ══════════════════ */
+
+const CANDLE_KEY = "budda.candles.v2";
+let candles = [];                     // {o, h, l, c, t}  t = 봉 시작 epoch초
+let curBucket = -1;
+let saveCounter = 0;
+const chart = document.getElementById("chart");
+const cctx = chart.getContext("2d");
+
+const UP_COLOR = "#ff2418";           // 상승 빨강 (한국 시세 관행)
+const DOWN_COLOR = "#2e6bff";         // 하락 파랑
+
+const candleSec = () => Math.max(1, Math.round(params.candleMin * 60));
+// 봉 개수 = X축 범위 ÷ 봉 주기 (렌더링·저장 폭주 방지 상한 2000)
+const maxCandles = () => Math.min(2000, Math.max(2, Math.ceil(params.chartMin / params.candleMin)));
+
+// 하루 단위 차트가 재부팅에도 이어지도록 봉 데이터를 보존한다
+function saveCandles() {
+  localStorage.setItem(CANDLE_KEY, JSON.stringify({ candleMin: params.candleMin, candles, curBucket }));
+}
+function restoreCandles() {
+  const saved = JSON.parse(localStorage.getItem(CANDLE_KEY) || "null");
+  if (!saved || saved.candleMin !== params.candleMin || !saved.candles?.length) return;
+  const last = saved.candles[saved.candles.length - 1];
+  // 마지막 봉이 X축 범위 밖이면 이어붙일 의미가 없다
+  if (Math.floor(Date.now() / 1000) - last.t > params.chartMin * 60) return;
+  candles = saved.candles.slice(-maxCandles());
+  curBucket = saved.curBucket;
+}
+function resetCandles() {
+  candles = [];
+  curBucket = -1;
+  saveCandles();
+  pushHistory();
+}
+
+// 1초마다 표시가를 샘플링. 봉은 절대시간 버킷에 정렬 (마지막 봉은 실시간 갱신)
+function pushHistory() {
+  const p = state.display;
+  const sec = candleSec();
+  const bucket = Math.floor(Date.now() / 1000 / sec);
+  if (bucket !== curBucket) {
+    curBucket = bucket;
+    candles.push({ o: p, h: p, l: p, c: p, t: bucket * sec });
+    while (candles.length > maxCandles()) candles.shift();
+    saveCandles();
+  } else {
+    const cur = candles[candles.length - 1];
+    cur.h = Math.max(cur.h, p);
+    cur.l = Math.min(cur.l, p);
+    cur.c = p;
+    if (++saveCounter % 60 === 0) saveCandles(); // 진행 중인 봉도 1분마다 백업
+  }
+  drawChart();
+}
+
+function drawChart() {
+  const w = chart.clientWidth, h = chart.clientHeight;
+  if (!w || !candles.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  chart.width = Math.round(w * dpr);
+  chart.height = Math.round(h * dpr);
+  cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cctx.clearRect(0, 0, w, h);
+
+  const plotL = 74;                   // 좌측 가격 라벨 영역
+  const plotT = 22;                   // 상단 캡션 영역
+  const plotB = h - 18;               // 하단 시간 라벨 영역
+  const plotH = plotB - plotT;
+
+  let lo = Math.min(...candles.map(c => c.l));
+  let hi = Math.max(...candles.map(c => c.h));
+  const pad = Math.max((hi - lo) * 0.18, 30000);
+  lo -= pad; hi += pad;
+  const Y = v => plotB - ((v - lo) / (hi - lo)) * plotH;
+
+  // 캡션
+  cctx.fillStyle = "#8a8a8a";
+  cctx.font = "11px ui-monospace, monospace";
+  cctx.textAlign = "left";
+  cctx.fillText("가격 (₩)", 4, 13);
+
+  // 가로 눈금선 + 좌측 가격 라벨
+  cctx.strokeStyle = "#1b1b1b";
+  cctx.lineWidth = 1;
+  cctx.textAlign = "right";
+  cctx.font = "10px ui-monospace, monospace";
+  for (let g = 0; g <= 4; g++) {
+    const gy = plotT + (plotH / 4) * g;
+    cctx.beginPath();
+    cctx.moveTo(plotL, gy); cctx.lineTo(w, gy);
+    cctx.stroke();
+    const gv = Math.round(hi - (g / 4) * (hi - lo));
+    cctx.fillStyle = "#5a5a5a";
+    cctx.fillText(gv.toLocaleString("ko-KR"), plotL - 8, gy + 3);
+  }
+
+  // 봉은 왼쪽부터 차오르고, 가득 차면 왼쪽으로 밀려난다
+  const nMax = maxCandles();
+  const slot = (w - plotL) / nMax;
+  const xAt = i => plotL + i * slot + slot / 2;
+  const sec = candleSec();
+
+  // 하단 시간 라벨: 화면에 ~6개, 절대시간 경계 기준이라 스크롤에도 흔들리지 않는다
+  const labelEvery = Math.max(1, Math.round(nMax / 6));
+  cctx.fillStyle = "#5a5a5a";
+  cctx.font = "10px ui-monospace, monospace";
+  cctx.textAlign = "center";
+  candles.forEach((cd, i) => {
+    if (Math.floor(cd.t / sec) % labelEvery !== 0) return;
+    const d = new Date(cd.t * 1000);
+    let label = String(d.getHours()).padStart(2, "0") + ":" +
+                String(d.getMinutes()).padStart(2, "0");
+    if (sec < 60) label += ":" + String(d.getSeconds()).padStart(2, "0");
+    cctx.fillText(label, xAt(i), h - 5);
+  });
+
+  if (params.chartType === "line") {
+    // ── 꺾은선: 봉 종가를 잇는다 ──
+    const grad = cctx.createLinearGradient(0, plotT, 0, plotB);
+    grad.addColorStop(0, "rgba(255, 36, 24, 0.20)");
+    grad.addColorStop(1, "rgba(255, 36, 24, 0)");
+    cctx.beginPath();
+    cctx.moveTo(xAt(0), Y(candles[0].c));
+    candles.forEach((cd, i) => cctx.lineTo(xAt(i), Y(cd.c)));
+    cctx.lineTo(xAt(candles.length - 1), plotB);
+    cctx.lineTo(xAt(0), plotB);
+    cctx.closePath();
+    cctx.fillStyle = grad;
+    cctx.fill();
+
+    cctx.beginPath();
+    cctx.moveTo(xAt(0), Y(candles[0].c));
+    candles.forEach((cd, i) => cctx.lineTo(xAt(i), Y(cd.c)));
+    cctx.strokeStyle = UP_COLOR;
+    cctx.lineWidth = 2;
+    cctx.shadowColor = "#ff3020";
+    cctx.shadowBlur = 6;
+    cctx.stroke();
+    cctx.shadowBlur = 0;
+
+    const li = candles.length - 1;
+    cctx.beginPath();
+    cctx.arc(xAt(li), Y(candles[li].c), 3.5, 0, 7);
+    cctx.fillStyle = "#ff6a55";
+    cctx.fill();
+  } else {
+    // ── 캔들 ──
+    const bodyW = Math.max(1, slot * 0.55);
+    candles.forEach((cd, i) => {
+      const x = xAt(i);
+      const up = cd.c >= cd.o;
+      const color = up ? UP_COLOR : DOWN_COLOR;
+
+      // 꼬리 (고가-저가)
+      cctx.strokeStyle = color;
+      cctx.lineWidth = 1;
+      cctx.beginPath();
+      cctx.moveTo(x, Y(cd.h));
+      cctx.lineTo(x, Y(cd.l));
+      cctx.stroke();
+
+      // 몸통 (시가-종가) — 보합은 1.5px 가로선
+      const yTop = Y(Math.max(cd.o, cd.c));
+      const yBot = Y(Math.min(cd.o, cd.c));
+      cctx.fillStyle = color;
+      cctx.shadowColor = color;
+      cctx.shadowBlur = 3;
+      cctx.fillRect(x - bodyW / 2, yTop, bodyW, Math.max(1.5, yBot - yTop));
+      cctx.shadowBlur = 0;
+    });
+  }
+
+  // 현재가 점선 + 라벨
+  const last = candles[candles.length - 1];
+  const yNow = Y(last.c);
+  cctx.setLineDash([4, 4]);
+  cctx.strokeStyle = "#7a5a52";
+  cctx.beginPath();
+  cctx.moveTo(plotL, yNow); cctx.lineTo(w, yNow);
+  cctx.stroke();
+  cctx.setLineDash([]);
+  cctx.fillStyle = "#ffb3a8";
+  cctx.textAlign = "right";
+  cctx.font = "bold 11px ui-monospace, monospace";
+  cctx.fillText(last.c.toLocaleString("ko-KR"), w - 4, yNow - 5);
+}
+
+/* ══════════════════ 4. 패널 UI 바인딩 ══════════════════ */
+
+const $ = id => document.getElementById(id);
+const panel = $("panel");
+// 이벤트 중복 발생 환경 대비: 400ms 내 재토글 무시
+let lastToggle = 0;
+let adminUnlocked = false; // 한 번 인증하면 페이지 새로고침 전까지 유지
+function togglePanel() {
+  const now = performance.now();
+  if (now - lastToggle < 400) return;
+  lastToggle = now;
+  if (panel.hidden && params.adminPin && !adminUnlocked) {
+    const input = window.prompt("관리자 PIN을 입력하세요");
+    if (input !== params.adminPin) return;
+    adminUnlocked = true;
+  }
+  panel.hidden = !panel.hidden;
+}
+$("gear").addEventListener("click", togglePanel);
+
+// ⚙ 버튼을 정확히 못 누르는 환경(미러링 뷰어, 좌표 어긋남) 대비:
+// 패널 밖 아무 곳이나 빠르게 두 번 탭해도 패널이 열린다
+let lastTap = 0;
+document.addEventListener("click", e => {
+  if (panel.contains(e.target) || e.target.id === "gear") return;
+  const now = performance.now();
+  if (now - lastTap < 450) { lastTap = 0; togglePanel(); }
+  else lastTap = now;
+});
+
+const numFields = [
+  ["pBase", "base"], ["pUnit", "unit"], ["pMin", "min"],
+  ["pMax", "max"], ["pInterval", "interval"],
+  ["pChartMin", "chartMin"], ["pCandleMin", "candleMin"],
+  ["pTaxiSec", "taxiSec"], ["pTaxiAmt", "taxiAmt"],
+  ["pDetSec", "detSec"], ["pMinScore", "minScore"],
+  ["pLockVal", "lockValue"],
+];
+const textFields = [
+  ["tTitle", "titleText", "title"],
+  ["tUnit", "unitText", "unitLabel"],
+  ["tFoot", "footText", "footMsg"],
+];
+function applyTexts() {
+  for (const [, key, elId] of textFields) $(elId).textContent = params[key];
+  document.title = params.titleText;
+}
+function syncPanel() {
+  for (const [id, key] of numFields) $(id).value = params[key];
+  for (const [id, key] of textFields) $(id).value = params[key];
+  $("pChartType").value = params.chartType;
+  $("pSource").value = params.source;
+  $("pFacing").value = params.camFacing;
+  $("pCdShow").checked = params.cdShow;
+  $("pLock").checked = params.lockPrice;
+  $("tPin").value = params.adminPin;
+  $("simCount").value = state.simCount;
+  $("simCountVal").textContent = state.simCount;
+}
+for (const [id, key] of numFields) {
+  $(id).addEventListener("change", e => {
+    const v = parseFloat(e.target.value);
+    if (!isNaN(v)) {
+      params[key] = v; saveParams();
+      if (key === "taxiSec") state.taxiLeft = params.taxiSec;
+      if (key === "candleMin") resetCandles(); // 봉 주기가 달라지면 기존 봉과 섞을 수 없다
+      if (key === "chartMin") {                 // 범위 변경은 보이는 개수만 조절 (리셋 불필요)
+        while (candles.length > maxCandles()) candles.shift();
+        saveCandles();
+        drawChart();
+      }
+      restartEngine();
+    }
+  });
+}
+for (const [id, key] of textFields) {
+  $(id).addEventListener("change", e => {
+    params[key] = e.target.value; saveParams(); applyTexts();
+  });
+}
+$("pChartType").addEventListener("change", e => {
+  params.chartType = e.target.value; saveParams(); drawChart();
+});
+$("pSource").addEventListener("change", e => {
+  params.source = e.target.value; saveParams();
+  if (params.source === "camera") startCamera();
+  else stopCamera();
+  engineTick(); updateCountdown(); updateSide();
+});
+$("pFacing").addEventListener("change", e => {
+  params.camFacing = e.target.value; saveParams();
+  if (cam.running) { stopCamera(); startCamera(); } // 방향 전환은 재시작 필요
+});
+$("btnCam").addEventListener("click", () => cam.running ? stopCamera() : startCamera());
+$("pCdShow").addEventListener("change", e => {
+  params.cdShow = e.target.checked; saveParams(); updateCountdown();
+});
+$("pLock").addEventListener("change", e => {
+  params.lockPrice = e.target.checked; saveParams();
+  computeTarget(); updateCountdown(); updateReadout();
+});
+$("tPin").addEventListener("change", e => {
+  params.adminPin = e.target.value.trim(); saveParams();
+});
+$("simCount").addEventListener("input", e => {
+  state.simCount = parseInt(e.target.value, 10);
+  $("simCountVal").textContent = state.simCount;
+  engineTick(); // 슬라이더 반응성: 즉시 1틱 반영
+  updateCountdown();
+  updateSide();
+});
+$("btnTaxiReset").onclick = () => {
+  state.taxiAccum = 0;
+  localStorage.setItem(ACCUM_KEY, "0");
+  state.taxiLeft = params.taxiSec;
+  computeTarget();
+  updateReadout();
+};
+$("btnDayReset").onclick = () => {
+  day = { date: todayStr(), open: state.target, hi: state.display, lo: state.display };
+  saveDay();
+  updateSide();
+};
+$("btnReset").onclick = () => {
+  params = { ...DEFAULTS }; saveParams(); syncPanel(); applyTexts(); restartEngine();
+};
+
+function updateReadout() {
+  if (panel.hidden) return;
+  $("readout").textContent =
+    `카운트 소스   : ${params.source === "camera" ? "카메라" : "슬라이더"} (카메라 ${cam.running ? "동작 중" : "꺼짐"})\n` +
+    `가격 고정     : ${params.lockPrice ? "ON → ₩" + params.lockValue.toLocaleString() : "OFF"}\n` +
+    `감지 인원     : ${readCount()}명\n` +
+    `EMA          : ${state.emaCount.toFixed(2)}\n` +
+    `미터기 누적   : +${state.taxiAccum.toLocaleString()}₩ (다음 가산까지 ${state.taxiLeft}초)\n` +
+    `오늘 시가     : ${day.open.toLocaleString()}₩\n` +
+    `목표가       : ${state.target.toLocaleString()}₩\n` +
+    `표시가       : ${state.display.toLocaleString()}₩`;
+}
+
+/* ══════════════════ 5. 카메라 인원 감지 (P2) ══════════════════
+   브라우저 안에서 TensorFlow.js + COCO-SSD로 사람을 센다.
+   라이브러리는 카메라를 켤 때만 동적 로드 — 슬라이더 모드는 오프라인에서도 동작.
+   (P3에서 Service Worker로 모델까지 캐싱해 완전 오프라인화 예정)          */
+
+const TFJS_URL = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js";
+const COCO_URL = "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js";
+const camVideo = document.getElementById("camVideo");
+const camOverlay = document.getElementById("camOverlay");
+const calib = document.getElementById("calib");
+const calibInfo = document.getElementById("calibInfo");
+const camStatusEl = document.getElementById("camStatus");
+const cam = { model: null, stream: null, running: false, fails: 0 };
+
+const setCamStatus = msg => { camStatusEl.textContent = msg; };
+
+function loadScript(src) {
+  return new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = ok;
+    s.onerror = () => fail(new Error("스크립트 로드 실패 (인터넷 연결 확인): " + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function ensureModel() {
+  if (cam.model) return;
+  setCamStatus("라이브러리 로딩 중...");
+  if (!window.tf) await loadScript(TFJS_URL);
+  if (!window.cocoSsd) await loadScript(COCO_URL);
+  setCamStatus("모델 로딩 중...");
+  cam.model = await cocoSsd.load({ base: "lite_mobilenet_v2" }); // 태블릿에서도 가벼운 경량 모델
+}
+
+async function startCamera() {
+  if (cam.running) return;
+  try {
+    await ensureModel();
+    setCamStatus("카메라 여는 중...");
+    cam.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: params.camFacing, width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false,
+    });
+    camVideo.srcObject = cam.stream;
+    await camVideo.play();
+    calib.hidden = false;
+    cam.running = true;
+    cam.fails = 0;
+    setCamStatus("감지 중");
+    $("btnCam").textContent = "카메라 중지";
+    detectLoop();
+  } catch (e) {
+    setCamStatus("오류: " + (e.message || e.name));
+    stopCamera(true);
+  }
+}
+
+function stopCamera(keepStatus) {
+  cam.running = false;
+  cam.stream?.getTracks().forEach(t => t.stop());
+  cam.stream = null;
+  camVideo.srcObject = null;
+  calib.hidden = true;
+  if (!keepStatus) setCamStatus("중지됨");
+  $("btnCam").textContent = "카메라 시작";
+}
+
+async function detectLoop() {
+  if (!cam.running) return;
+  try {
+    const preds = await cam.model.detect(camVideo);
+    const people = preds.filter(p => p.class === "person" && p.score >= params.minScore);
+    state.camCount = people.length;
+    cam.fails = 0;
+    drawCamOverlay(people);
+    if (params.source === "camera") { updateCountdown(); updateSide(); }
+  } catch (e) {
+    // 일시 오류는 무시하고 재시도, 연속 실패면 중지 (마지막 카운트는 유지되어 가격이 튀지 않는다)
+    if (++cam.fails > 5) { setCamStatus("감지 오류: " + (e.message || e)); stopCamera(true); return; }
+  }
+  setTimeout(detectLoop, Math.max(300, params.detSec * 1000));
+}
+
+function drawCamOverlay(people) {
+  const w = camVideo.clientWidth, h = camVideo.clientHeight;
+  if (!w || !camVideo.videoWidth) return;
+  camOverlay.width = w;
+  camOverlay.height = h;
+  const sx = w / camVideo.videoWidth, sy = h / camVideo.videoHeight;
+  const octx = camOverlay.getContext("2d");
+  octx.clearRect(0, 0, w, h);
+  octx.strokeStyle = "#00e050";
+  octx.fillStyle = "#00e050";
+  octx.lineWidth = 2;
+  octx.font = "600 12px ui-monospace, monospace";
+  for (const p of people) {
+    const [bx, by, bw, bh] = p.bbox;
+    octx.strokeRect(bx * sx, by * sy, bw * sx, bh * sy);
+    octx.fillText(Math.round(p.score * 100) + "%", bx * sx + 3, by * sy + 14);
+  }
+  calibInfo.textContent = "감지 인원: " + people.length + "명";
+}
+
+/* ══════════════════ 6. 전시 운영 보조 ══════════════════ */
+
+// 화면 꺼짐 방지 (지원 기기에서만, 사용자 제스처 후 활성화)
+async function keepAwake() {
+  try { await navigator.wakeLock?.request("screen"); } catch (_) {}
+}
+document.addEventListener("click", keepAwake, { once: true });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") keepAwake();
+});
+
+// PWA: 오프라인 캐싱 Service Worker (HTTPS/localhost에서만 동작)
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+
+/* ── 기동 ── */
+applyTexts();
+syncPanel();
+computeTarget();
+state.display = state.target;
+initDay();
+noteDayPrice(state.display);
+restoreCandles();
+pushHistory();
+restartEngine();
+updateCountdown();
+updateSide();
+render();
+// 카메라 모드로 저장돼 있으면 자동 시작 (전시장 재부팅 대응)
+if (params.source === "camera") startCamera();
+</script>
+</body>
+</html>
